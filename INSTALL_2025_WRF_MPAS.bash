@@ -1993,6 +1993,13 @@ wrf_compile_safe() {
     # Clean any previous build artifacts
     ./clean
     patch_wrfnc4_block "./configure"
+
+         if ! mpi_setup; then
+    echo "ERRO: mpi_setup falhou. Verifique LIBS_DIR, INTEL_MPI, COMPILER, etc."
+    exit 1
+  fi
+
+    
     # Launch interactive configuration
     # Option 34 = dmpar (distributed memory) + gfortran
     # Option 1  = basic nesting
@@ -2000,7 +2007,7 @@ wrf_compile_safe() {
 
     # Optional manual review/editing of configure.wrf file
     #vim configure.wrf
-
+    
     # Compile WRF with parallel jobs based on available CPU cores
     wrf_compile_safe
 
@@ -2044,6 +2051,10 @@ if [ "${MODELS[1]}" -eq 1 ]; then
   git clone https://github.com/wrf-model/WPS.git
   cd WPS || { echo "ERRO: WPS não clonado"; { return 1; } 2>/dev/null || exit 1; }
   ./clean
+     if ! mpi_setup; then
+    echo "ERRO: mpi_setup falhou. Verifique LIBS_DIR, INTEL_MPI, COMPILER, etc."
+    exit 1
+  fi
 
   # configure (sem forçar nada; você escolhe no menu)
   safe_run_csh ./configure
