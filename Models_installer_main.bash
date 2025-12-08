@@ -49,23 +49,23 @@ export DOWNLOADS=/home/regis/Downloads/
 #
 #  Modulo com as Funcoes de sistema e dos compialdores
 #
-source ./Models_installer_init.bash 
+source ../INIT/Models_installer_init.bash 
 #
 # Modulo com funções diversas 
 #
-source Models_installer_functions.bash
+source ../INIT/Models_installer_functions.bash
 #
 #  Modulo com as instalações das bibliotecas (em forma de funções) 
 #
-source Models_installer_libs.bash
+source ../LIBS/Models_installer_libs.bash
 #
 # Instalador do WRF e WPS e outras aplicações relacionadas. 
 #
-source Models_installer_wrf.bash 
+source ../MODELS/Models_installer_wrf.bash 
 #
 # Instalador do MPAS 
 #
-source Models_installer_MPAS.bash
+source ../MODELS/Models_installer_MPAS.bash
 #
 #  Veirfica qual distribuição e depois atualzia o sistema 
 # 
@@ -78,7 +78,7 @@ setup_install_libs_dir   ##sempre ativa!!!
 #
 #  cria as variaveis ambientes. Sempre ativo!!!
 #
-source Models_installer_enviroment.bash
+source ../IMIT/sModels_installer_enviroment.bash
 #
 #  controla  uso dos processadores
 #  nos processos de compilação 
