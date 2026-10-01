@@ -90,6 +90,7 @@
 
 #----------------------------------------------------------------------------------------------------
 install_MPAS_V801(){
+    local mpas_version="${MPAS_VERSION:-8.0.1}"
     
     define_compilers "$GNU_MPI"
     export MPAS_EXTERNAL_INCLUDES="-I$LIBS_DIR/include"
@@ -102,18 +103,22 @@ install_MPAS_V801(){
                             $LIBS_DIR/lib/libhdf5.a -lz -ldl -lm -lpthread"
 
     cd "$MODEL_DIR_INSTALL"
-    rm -rf MPAS-${MPAS_VERSION}
-    git clone https://github.com/MPAS-Dev/MPAS-Model.git MPAS-${MPAS_VERSION}
-    cd MPAS-${MPAS_VERSION}
-    git checkout -q tags/v${MPAS_VERSION}
+    rm -rf "MPAS-${mpas_version}"
+    git clone --branch "v${mpas_version}" --depth 1 https://github.com/MPAS-Dev/MPAS-Model.git "MPAS-${mpas_version}" || return 1
+    cd "MPAS-${mpas_version}" || return 1
+    # Confirma o pin antes de compilar; evita seguir com o branch padrão se o checkout falhar.
+    if [ "$(git describe --tags --exact-match 2>/dev/null)" != "v${mpas_version}" ]; then
+        echo "ERRO: o MPAS não está na versão esperada v${mpas_version}."
+        return 1
+    fi
   
 
     echo ">> Compiling MPAS..."
     make gfortran CORE=init_atmosphere USE_PIO2=true PRECISION=single "${MAKE_OVERRIDES[@]}"
     make clean CORE=atmosphere USE_PIO2=true PRECISION=single
     make gfortran CORE=atmosphere USE_PIO2=true PRECISION=single -j"$CPU_HALF_EVEN" "${MAKE_OVERRIDES[@]}"
-    check_lib_success "atmosphere_model" "$MODEL_DIR_INSTALL/MPAS-${MPAS_VERSION}/atmosphere_model"
-    check_lib_success "init_atmosphere" "$MODEL_DIR_INSTALL/MPAS-${MPAS_VERSION}/init_atmosphere_model"
+    check_lib_success "atmosphere_model" "$MODEL_DIR_INSTALL/MPAS-${mpas_version}/atmosphere_model"
+    check_lib_success "init_atmosphere" "$MODEL_DIR_INSTALL/MPAS-${mpas_version}/init_atmosphere_model"
     
   [ "$PROMPTOK" -eq 1 ] && read -p "MPAS build done. Press ENTER..."
 }
