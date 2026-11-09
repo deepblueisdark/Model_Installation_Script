@@ -1,53 +1,147 @@
-🌎 Automated Atmospheric Model Installation Script (WRF/MPAS/ICON)
-🧾 Descrição / Description
+# 🌎 Automated Atmospheric Model Installation Script (WRF/MPAS/ICON)
 
-The Automated Atmospheric Model Installation Script (WRF/MPAS/ICON) is designed to streamline and standardize the installation, configuration, and compilation process of numerical weather and climate models in high-performance computing (HPC) environments.
-
-This script automates the entire setup workflow — from system and compiler detection to full model compilation. It is modular and flexible, allowing users to choose between serial and parallel builds, select preferred compilers (GNU, Intel, NVIDIA), and specify the MPI implementation (MPICH, Intel MPI, OpenMPI, etc.).
-
-Key features include:
-
-Automatic detection of operating system and architecture (Rocky Linux, Ubuntu, CentOS, etc.);
-
-Dynamic configuration of compilers and environment variables (PATH, LD_LIBRARY_PATH, OMP_STACKSIZE);
-
-Automated download, extraction, and build of all required scientific libraries (NetCDF, HDF5, Jasper, Zlib, LibPNG, PnetCDF, Eccodes, CDI, etc.);
-
-Support for multiple versions of both models and libraries, with compilation logs and verification checks;
-
-Full compilation of WRF, WPS, MPAS-A, and ICON models with MPI and OpenMP options;
-
-Automated integrity tests and log generation for troubleshooting and reproducibility;
-
-Non-interactive mode, enabling scheduled or remote installation on HPC clusters.
-
-The goal is to provide a standardized, reproducible, and robust installer, minimizing human error and ensuring consistent model environments across different systems.
-
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+## 🧾 Descrição
 
 O script instalador automatizado de modelos atmosféricos (WRF/MPAS/ICON) foi desenvolvido para simplificar e padronizar o processo de instalação, configuração e compilação de modelos numéricos de previsão do tempo e clima em ambientes Linux de alto desempenho (HPC).
 
-Ele automatiza todas as etapas necessárias para preparar o ambiente científico, desde a detecção do sistema operacional e compiladores disponíveis, até a compilação completa dos modelos. O script é modular e flexível, permitindo ao usuário escolher entre diferentes compilações (serial ou paralela), bem como selecionar o compilador desejado (GNU, Intel ou NVIDIA) e o tipo de MPI (MPICH, Intel MPI, OpenMPI, etc.).
+Ele automatiza todas as etapas necessárias para preparar o ambiente científico, desde a detecção do sistema operacional e compiladores disponíveis até a compilação completa dos modelos.
 
-Entre as principais funcionalidades, estão:
+Principais funcionalidades:
 
-Detecção automática do sistema operacional e arquitetura (Rocky Linux, Ubuntu, CentOS, etc.);
+- Detecção automática do sistema operacional (Rocky Linux, AlmaLinux, Fedora, Ubuntu, Debian);
+- Configuração dinâmica de compiladores e variáveis de ambiente (PATH, LD_LIBRARY_PATH, NETCDF, HDF5...);
+- Download (com espelhos alternativos e verificação de integridade), extração e compilação das bibliotecas científicas (MPICH, Zlib, LibPNG, Jasper, HDF5, PnetCDF, NetCDF-C/Fortran, PIO, OpenJPEG, LibXML2, OpenBLAS, AEC, ecCodes, CDI);
+- Compilação de WRF, WPS e MPAS-A;
+- Seleção do que instalar por **flags** de linha de comando, com **dependências resolvidas automaticamente**;
+- O que já está instalado é **pulado** — dá para rodar de novo depois de uma falha;
+- **Um log por etapa** e resumo final (OK / FALHA / PULADO);
+- Modo não interativo (incluindo o `./configure` do WRF/WPS), ideal para clusters HPC.
 
-Configuração dinâmica de compiladores e variáveis de ambiente (PATH, LD_LIBRARY_PATH, OMP_STACKSIZE);
+---
 
-Download, extração e compilação automatizada das bibliotecas científicas necessárias (NetCDF, HDF5, Jasper, Zlib, LibPNG, PnetCDF, Eccodes, CDI, entre outras);
+## 🚀 Como usar
 
-Suporte a múltiplas versões de cada modelo e biblioteca, com logs e verificações de sucesso em cada etapa;
+```bash
+git clone https://github.com/deepblueisdark/Model_Installation_Script.git
+cd Model_Installation_Script
 
-Compilação completa dos modelos WRF, WPS, MPAS-A e ICON, com opções para MPI e OpenMP;
+./Models_installer_main.bash --help        # todas as opções
+./Models_installer_main.bash --dry-run     # mostra o plano sem compilar nada
+./Models_installer_main.bash --check-downloads   # testa os links de download
+```
 
-Testes automáticos de integridade e geração de logs de compilação (úteis para depuração e auditoria);
+Sem nenhuma flag, o script instala o que estiver em `DEFAULT_LIBS` e `DEFAULT_MODELS` (topo do `Models_installer_main.bash`).
 
-Modo não interativo, ideal para automação via crontab ou execução remota em clusters HPC.
+### Exemplos
 
-O objetivo é fornecer um instalador padronizado, reprodutível e robusto, reduzindo erros humanos e garantindo consistência entre diferentes ambientes e servidores.
+```bash
+# MPAS completo (libs + modelo) usando 8 núcleos
+./Models_installer_main.bash --libs mpas --models mpas --jobs 8
 
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-🇺🇸 English Description
+# WRF + WPS sem nenhuma pergunta (opção 34 = GNU dmpar; WPS opção 3 = dmpar)
+./Models_installer_main.bash --libs wrf --models wrf,wps --wrf-config 34 --wps-config 3
 
+# Só as bibliotecas do ICON, tudo via wrappers MPI, em outro prefixo
+./Models_installer_main.bash --mode 2 --prefix /opt/MODELS --libs icon --models none
 
+# Reinstalar só o HDF5, mostrando a compilação na tela
+./Models_installer_main.bash --libs hdf5 --models none --no-deps --force --verbose
+
+# Baixar tudo antes (ex.: para depois compilar numa máquina sem internet)
+./Models_installer_main.bash --libs all --download-only
+
+# Ver o que já está instalado
+./Models_installer_main.bash --list
+```
+
+### Flags
+
+| Flag | Descrição |
+|---|---|
+| `-l, --libs LISTA` | Bibliotecas (vírgula). Nomes ou presets `wrf`, `mpas`, `icon`, `all`, `none` |
+| `-m, --models LISTA` | Modelos: `wrf`, `wps`, `mpas`, `all`, `none` |
+| `-x, --skip LISTA` | Remove itens do plano |
+| `--no-deps` | Não adiciona dependências automaticamente |
+| `-f, --force` | Reinstala mesmo o que já existe |
+| `--mode 0\|1\|2` | Modo de compilação (tabela abaixo) |
+| `-p, --prefix DIR` | Diretório base (padrão `$HOME/MODELS`) |
+| `-d, --downloads DIR` | Pasta dos tarballs (padrão `$HOME/Downloads`) |
+| `-j, --jobs N` / `--all-cores` | Núcleos para compilar (padrão: metade) |
+| `--mpas-version V` | `8.0.1` (padrão), outra tag, ou `latest` |
+| `--wrf-version TAG` / `--wps-version TAG` | Fixa a versão (ex.: `v4.6.1`). Padrão: mais recente |
+| `--wrf-config N` / `--wrf-nest N` / `--wps-config N` | Respostas do `./configure` (sem menu) |
+| `-n, --dry-run` | Mostra o plano e não compila |
+| `-v, --verbose` | Mostra a compilação na tela (além do log) |
+| `-k, --keep-going` | Continua nas próximas etapas se uma falhar |
+| `--checks` | Executa os `make check` |
+| `--prompt` | Pausa a cada etapa (modo debug) |
+| `--update-system` | Atualiza o sistema e instala pacotes (dnf/apt, usa `sudo`) |
+| `--check-downloads` | Só testa os links |
+| `--download-only` | Só baixa os tarballs do plano |
+| `--list` | Lista libs/modelos e o que já está instalado |
+
+Todas as flags também podem ser passadas por variável de ambiente (ex.: `GNU_MPI=2 JOBS=8 ./Models_installer_main.bash`).
+
+### Modos de compilação (`--mode`)
+
+| Modo | Diretório | Descrição |
+|---|---|---|
+| `0` | `$PREFIX/GNU/SISTEM` | Compiladores e MPI do sistema (não recomendado com Conda ativo) |
+| `1` (padrão) | `$PREFIX/GNU/SERIAL` | Libs compiladas em serial (gcc/gfortran) + MPICH próprio; PnetCDF e PIO em paralelo |
+| `2` | `$PREFIX/GNU/MPICH` | Tudo compilado pelos wrappers do MPICH (HDF5/NetCDF paralelos) |
+
+### Presets de bibliotecas
+
+| Preset | Bibliotecas |
+|---|---|
+| `wrf` | mpich zlib libpng jasper hdf5 netcdf_c netcdf_fortran |
+| `mpas` | preset `wrf` + pnetcdf pio |
+| `icon` | mpich zlib libpng openjpeg jasper libxml2 openblas hdf5 netcdf_c netcdf_fortran aec eccodes cdi |
+| `all` | todas |
+
+### Logs e ambiente
+
+- Cada etapa grava `$PREFIX/GNU/logs/<data_hora>/<etapa>.log`. Em caso de falha, as últimas linhas do log aparecem na tela.
+- Ao final, é gerado `$LIBS_DIR/env.sh`. Para usar os modelos depois: `source $LIBS_DIR/env.sh`.
+
+### Versões
+
+As versões ficam no bloco do topo de `Models_installer_main.bash`. As URLs (com espelhos) ficam em `LIBS/Models_installer_downloads.bash`.
+
+---
+
+## 📁 Estrutura
+
+```
+Models_installer_main.bash          # versões, padrões e fluxo principal
+check_downloads.sh                  # atalho para --check-downloads
+check_geog_mpas.sh                  # valida os dados GEOG do MPAS-A
+INIT/Models_installer_cli.bash      # flags, plano, dependências, logs, resumo
+INIT/Models_installer_init.bash     # diretórios, CPU, compiladores, MPI, update do sistema
+INIT/Models_installer_enviroment.bash  # variáveis de ambiente (NETCDF, HDF5, CPPFLAGS...)
+INIT/Models_installer_functions.bash   # funções auxiliares
+LIBS/Models_installer_downloads.bash   # URLs, espelhos, fetch, check_downloads
+LIBS/Models_installer_libs.bash        # install_* das bibliotecas
+MODELS/Models_installer_wrf.bash       # WRF e WPS
+MODELS/Models_installer_MPAS.bash      # MPAS-A
+```
+
+---
+
+## 🇺🇸 English
+
+The **Automated Atmospheric Model Installation Script (WRF/MPAS/ICON)** streamlines and standardizes the installation and compilation of numerical weather and climate models on Linux HPC systems.
+
+It detects the OS and compilers, downloads (with mirrors and integrity checks) and builds all required libraries (MPICH, Zlib, LibPNG, Jasper, HDF5, PnetCDF, NetCDF-C/Fortran, PIO, OpenJPEG, LibXML2, OpenBLAS, AEC, ecCodes, CDI), and compiles WRF, WPS and MPAS-A.
+
+Quick start:
+
+```bash
+./Models_installer_main.bash --help
+./Models_installer_main.bash --libs mpas --models mpas --jobs 8
+./Models_installer_main.bash --libs wrf --models wrf,wps --wrf-config 34 --wps-config 3
+```
+
+Dependencies are resolved automatically, already-installed components are skipped (`--force` to rebuild), every step writes its own log, and a summary table is printed at the end. See the tables above for all flags, build modes and presets.
+
+**Author:** Reginaldo Ventura de Sá — reginaldo.venturadesa@gmail.com

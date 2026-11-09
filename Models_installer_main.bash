@@ -1,29 +1,30 @@
 #!/bin/bash
 #-------------------------------------------------------------------------
 #
-#                   INSTALADOR DE MODELOS WRF. MAPS E ICON 
-#
+#                   INSTALADOR DE MODELOS WRF, MPAS E ICON
 #
 #--------------------------------------------------------------------------
 #
-# Autor: Reginaldo Ventura de Sà (reginadlo.venturadesa@gmail.com)
+# Autor: Reginaldo Ventura de Sá (reginaldo.venturadesa@gmail.com)
 #
-#---------------------------------------------------------------------------- 
-#  Versão GNU: 10/4/2025 
-#    
+#----------------------------------------------------------------------------
+#  Versão GNU: 09/11/2026
 #
-# TODO:
-#  Direcionar as saídas das instalações para NULL. 
+#  Uso rápido:
+#     ./Models_installer_main.bash --help
+#     ./Models_installer_main.bash --libs mpas --models mpas --jobs 8
+#     ./Models_installer_main.bash --dry-run          (mostra o plano)
 #
-#
-#
+#  Cada etapa grava um log próprio em $INSTALL_DIR/logs/<data>/<etapa>.log
+#  e o que já está instalado é pulado (use --force para reinstalar).
 #-------------------------------------------------------------------------------
+
 #-------------------------------------------------------------------------------
 # Versões das bibliotecas e dos modelos.
 # Ajuste as versões somente neste bloco.
 #-------------------------------------------------------------------------------
 export HDF5_Version="1_12_2"
-export Zlib_Version="1.3.1"
+export Zlib_Version="1.3.2"
 export Netcdf_C_Version="4.9.2"
 export Netcdf_Fortran_Version="4.6.1"
 export Mpich_Version="4.2.1"
@@ -39,122 +40,116 @@ export Cdi_volume="30033"
 export OpenBlas_Version="0.3.27"
 export LIBXML2_VERSION="2.11.7"
 export libxml2_version="2.11"
-export MPAS_VERSION="8.0.1"
+export MPAS_VERSION="${MPAS_VERSION:-8.0.1}"     # ou "latest" (--mpas-version)
+export WRF_VERSION="${WRF_VERSION:-}"            # vazio = mais recente (--wrf-version v4.6.1)
+export WPS_VERSION="${WPS_VERSION:-}"            # vazio = mais recente (--wps-version v4.6.0)
 
-# Diretório base de instalação. Pode ser sobrescrito antes de executar o script.
+#-------------------------------------------------------------------------------
+# O que instalar quando o script é executado SEM --libs / --models.
+# (Dependências faltantes são adicionadas automaticamente; o que já
+#  está instalado é pulado.)
+#
+#   Presets de libs: wrf | mpas | icon | all | none
+#   Libs: mpich zlib zstd libpng openjpeg jasper libxml2 openblas hdf5
+#         pnetcdf netcdf_c netcdf_fortran pio aec eccodes cdi
+#   Modelos: wrf wps mpas
+#-------------------------------------------------------------------------------
+DEFAULT_LIBS="${DEFAULT_LIBS:-mpich,pnetcdf,pio}"
+DEFAULT_MODELS="${DEFAULT_MODELS:-wrf,wps,mpas}"
+
+# Diretório base de instalação. Pode ser sobrescrito (--prefix ou variável).
 export HOME_DIR="${HOME_DIR:-$HOME}"
 export INSTALLATION_PATH="${INSTALLATION_PATH:-$HOME_DIR/MODELS}"
 #
-# export INSTALLATION_PATH="${INSTALLATION_PATH:-$HOME_DIR/REGIS/TESTE/MODELS}"
-#
-# Define o compialdor (defaul:GNU)
-#    Não mexer!
+# Define o compilador (default: GNU). Não mexer!
 #
 export COMPILER=${COMPILER:-GNU}
 #
-#   GNU_MPI=0  : Busca Compialdores no sistema atual e/ou Miniconda 
-#   Não recomendável!!!  
+#   GNU_MPI=0  : Busca compiladores no sistema atual e/ou Miniconda. Não recomendável!!!
+#   GNU_MPI=1  : Utilizado para SMP mas pode ser usado em DM_PAR.
+#                Compilações são feitas no modo serial (CC/gfortran), exceto PIO e PNETCDF.
+#   GNU_MPI=2  : Todas as bibliotecas são compiladas pelos wrappers do MPI.
+#   (flag: --mode 0|1|2)
 #
-#   GNU_MPI=1  :  Utilizado para SMP mas  pode ser usado em DM_PAR
-#                 Compilações são feita no modo serial (CC/gfortran)
-#                 Exceto PIO e PNETCDF. 
-#
-#
-#   GNU_MPI=2  :   Todas as biblioetcas são compiladas pelos wrappers do MPI. 
-# 
-#    
 export GNU_MPI=${GNU_MPI:-1}
 #
-# SE =1 , a cada etapa pede  para pressioanr uma tecla. 
-#         modo DEBUG
+# PROMPTOK=1 pausa a cada etapa (modo DEBUG). Flag: --prompt
 #
-#  
-export PROMPTOK=1
+export PROMPTOK=${PROMPTOK:-0}
 #
-#  local dos downloads das bibliotecas. 
+# Local dos downloads das bibliotecas. Flag: --downloads DIR
 #
-export DOWNLOADS=/home/regis/Downloads/
+export DOWNLOADS="${DOWNLOADS:-$HOME_DIR/Downloads}"
 #
-#  Modulo com as Funcoes de sistema e dos compialdores
+# Núcleos: false = metade, true = todos. Flags: --jobs N / --all-cores
 #
-source ./INIT/Models_installer_init.bash 
-#
-# Modulo com funções diversas 
-#
-source ./INIT/Models_installer_functions.bash
-#
-#  Modulo com as instalações das bibliotecas (em forma de funções) 
-#
-source ./LIBS/Models_installer_libs.bash
-#
-# Instalador do WRF e WPS e outras aplicações relacionadas. 
-#
-source ./MODELS/Models_installer_wrf.bash 
-#
-# Instalador do MPAS 
-#
-source ./MODELS/Models_installer_MPAS.bash
-#
-#  Veirfica qual distribuição e depois atualzia o sistema 
-# 
-#Detect_system_distribution_and_update 
-#
-#  Baseado na configuração, cria as variaveis ambientais 
-#  LIBS_DIR, INSTALL_DIR e define  NETCDF, HDF, etc.. 
-#
-setup_install_libs_dir   ##sempre ativa!!! 
-#
-#  cria as variaveis ambientes. Sempre ativo!!!
-#
-source ./INIT/Models_installer_enviroment.bash
-#
-#  controla  uso dos processadores
-#  nos processos de compilação 
-#                   
-export USE_ALL_CORES=${USE_ALL_CORES:-false}        ### usa metade de false. usa tudo se true.  
+export USE_ALL_CORES=${USE_ALL_CORES:-false}
+
+#-------------------------------------------------------------------------------
+#  Módulos (caminhos relativos à pasta do script: pode ser chamado de qualquer lugar)
+#-------------------------------------------------------------------------------
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/INIT/Models_installer_functions.bash"   # funções diversas
+source "$SCRIPT_DIR/INIT/Models_installer_init.bash"        # sistema e compiladores
+source "$SCRIPT_DIR/INIT/Models_installer_cli.bash"         # flags, plano e etapas
+source "$SCRIPT_DIR/LIBS/Models_installer_downloads.bash"   # URLs e downloads
+source "$SCRIPT_DIR/LIBS/Models_installer_libs.bash"        # bibliotecas
+source "$SCRIPT_DIR/MODELS/Models_installer_wrf.bash"       # WRF e WPS
+source "$SCRIPT_DIR/MODELS/Models_installer_MPAS.bash"      # MPAS
+
+#-------------------------------------------------------------------------------
+#  1) Flags
+#-------------------------------------------------------------------------------
+parse_args "$@"
+
+# Ações que não precisam de diretórios nem compiladores
+if [ "$ACTION" = "check-downloads" ]; then
+    check_downloads
+    exit $?
+fi
+
+#-------------------------------------------------------------------------------
+#  2) Diretórios e ambiente (sempre ativos)
+#-------------------------------------------------------------------------------
+setup_install_libs_dir || exit 1
+source "$SCRIPT_DIR/INIT/Models_installer_enviroment.bash"
+export LOG_DIR="${LOG_DIR:-$INSTALL_DIR/logs/$(date +%Y%m%d_%H%M%S)}"
+
+build_plan
+
+if [ "$ACTION" = "list" ]; then
+    list_status
+    exit 0
+fi
+
+print_plan
+
+if [ "$ACTION" = "download-only" ]; then
+    download_plan
+    exit "$FAILED"
+fi
+
+#-------------------------------------------------------------------------------
+#  3) Sistema, CPU e compiladores
+#-------------------------------------------------------------------------------
+if [ "$UPDATE_SYSTEM" -eq 1 ]; then
+    if [ "$DRY_RUN" -eq 1 ]; then echo ">>> [dry-run] Detect_system_distribution_and_update"
+    else Detect_system_distribution_and_update; fi
+fi
+
 cpu_resource
-
-#
-# faz verificacao de compialdores
-#
 check_initial_compilers
-
-#
-# coisas do GNU
-#
 Toolchain_check_GNU
 
-#
-#  Processo de Instalação das bibliotecas 
-#  
-#
-# MPICH  (obrigatorio para GNU_MPI=1 e GNU_MPI=2)
-#
-install_mpich
-# 
-#  Bibliotecas. Comente A biblioteca que não for necessária ou que já foi compilada=.]  
-# 
-#
-#
-#install_zlib              ## ZLIB  (WRF/MPAS/ICON)
-#ensure_zstd_in_libs_dir   ## verificar libstd para compatibilidade NETCDF/HDF5
-#install_libpng            ## OPENPNG  (WRF/MPAS/ICON)
-#install_openjpeg          ## OPENJPG   (ICON)
-#install_jasper            ## JASPER  (WRF/MPAS/ICON)
-#install_libxml2           ## LIBXML2   (ICON)
-#install_openblas          ## OPENBLAS  (ICON)
-#install_hdf5              ## HDF5   (WRF/MPAS/ICON)
-install_pnetcdf           ## PNETCDF   (WRF/MPAS/ICON)
-#install_netcdf_c          ## NETCDF-C   (WRF/MPAS/ICON)
-#install_netcdf_fortran    ## NETCDF-FORTRAN   (WRF/MPAS/ICON)
-install_pio               ## PIO   (MPAS)
-#install_aec               ## AEC   (ICON)
-#install_eccodes           ## ECCODES  (ICON)
-#install_cdi               ## CDI   (ICON)
-#
-# MODELOS
-#
-install_wrf               ### versão mais atual 
-install_wps               ### versão mais atual 
-install_MPAS_V801         ### versão 8.0.1 
-#install_MPAS              ### versão mais atual (nem sempre funciona)
+#-------------------------------------------------------------------------------
+#  4) Instalação (bibliotecas e depois modelos, na ordem do plano)
+#-------------------------------------------------------------------------------
+[ "$DRY_RUN" -eq 1 ] || mkdir -p "$LOG_DIR"
+
+START_ALL=$SECONDS
+run_plan
+print_summary
+echo "   Tempo total: $(_fmt_time $((SECONDS - START_ALL)))"
+
+[ "$FAILED" -eq 0 ] && write_env_file
+exit "$FAILED"
