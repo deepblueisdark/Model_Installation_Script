@@ -24,7 +24,7 @@
 # Ajuste as versões somente neste bloco.
 #-------------------------------------------------------------------------------
 export HDF5_Version="1_12_2"
-export Zlib_Version="1.3.2"
+export Zlib_Version="1.4"
 export Netcdf_C_Version="4.9.2"
 export Netcdf_Fortran_Version="4.6.1"
 export Mpich_Version="4.2.1"
