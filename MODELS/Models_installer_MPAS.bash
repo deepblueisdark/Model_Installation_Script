@@ -15,6 +15,30 @@ mpas_dir_name(){
     if [ "${MPAS_VERSION:-8.0.1}" = latest ]; then echo "MPAS-Model"; else echo "MPAS-${MPAS_VERSION:-8.0.1}"; fi
 }
 
+#-----------------------------------------------------------------------------------
+# patch_mpas_c_ptr
+#   Contorna o bug do gfortran >= 13 (GCC PR 103931):
+#     "Error: Type name 'c_ptr' at (1) is ambiguous"  em mpas_init_atm_static.F
+#   O c_ptr chega por dois caminhos (use iso_c_binding direto + reexportado por
+#   outro módulo). Importamos o c_ptr com outro nome (mpas_cptr_t) só nesse
+#   arquivo, eliminando a ambiguidade. É seguro também em gfortran antigos.
+#-----------------------------------------------------------------------------------
+patch_mpas_c_ptr(){
+    local f="src/core_init_atmosphere/mpas_init_atm_static.F"
+    [ -f "$f" ] || return 0
+    if grep -qi 'mpas_cptr_t' "$f"; then
+        echo ">> patch c_ptr: já aplicado."
+        return 0
+    fi
+    if grep -qiE '^\s*use\s+iso_c_binding\s*,\s*only\s*:.*\bc_ptr\b' "$f"; then
+        sed -i -E 's/^(\s*use\s+iso_c_binding\s*,\s*only\s*:.*)\bc_ptr\b/\1mpas_cptr_t => c_ptr/I' "$f"
+        sed -i -E 's/type\s*\(\s*c_ptr\s*\)/type(mpas_cptr_t)/Ig' "$f"
+        echo ">> patch c_ptr aplicado em $f (contorno do bug do gfortran >= 13)."
+        grep -niE 'mpas_cptr_t' "$f" | head -5
+    fi
+    return 0
+}
+
 install_MPAS(){
     local mpas_version="${MPAS_VERSION:-8.0.1}"
     local mpas_dir; mpas_dir="$(mpas_dir_name)"
@@ -51,6 +75,12 @@ install_MPAS(){
             exit 1
         fi
     fi
+
+    patch_mpas_c_ptr
+
+    echo ">> Compiladores usados:"
+    echo "   gfortran: $(gfortran --version | head -1)"
+    echo "   mpif90  : $(command -v mpif90) -> $("${MPIFC:-mpif90}" --version 2>/dev/null | head -1)"
 
     echo ">> Compiling MPAS ($mpas_dir, PRECISION=$precision)..."
     make gfortran CORE=init_atmosphere USE_PIO2=true PRECISION="$precision" "${MAKE_OVERRIDES[@]}"
