@@ -40,7 +40,7 @@ export Cdi_volume="30033"
 export OpenBlas_Version="0.3.27"
 export LIBXML2_VERSION="2.11.7"
 export libxml2_version="2.11"
-export MPAS_VERSION="${MPAS_VERSION:-8.0.1}"     # ou "latest" (--mpas-version)
+export MPAS_VERSION="${MPAS_VERSION:-8.0.1}"     # X.Y.Z | latest | master | lista "8.0.1,latest" (--mpas-version)
 export WRF_VERSION="${WRF_VERSION:-}"            # vazio = mais recente (--wrf-version v4.6.1)
 export WPS_VERSION="${WPS_VERSION:-}"            # vazio = mais recente (--wps-version v4.6.0)
 

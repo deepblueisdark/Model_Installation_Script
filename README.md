@@ -38,6 +38,9 @@ Sem nenhuma flag, o script instala o que estiver em `DEFAULT_LIBS` e `DEFAULT_MO
 # MPAS completo (libs + modelo) usando 8 núcleos
 ./Models_installer_main.bash --libs mpas --models mpas --jobs 8
 
+# MPAS 8.0.1 e a versão mais recente, cada uma na sua pasta
+./Models_installer_main.bash --models mpas --mpas-version 8.0.1,latest
+
 # WRF + WPS sem nenhuma pergunta (opção 34 = GNU dmpar; WPS opção 3 = dmpar)
 ./Models_installer_main.bash --libs wrf --models wrf,wps --wrf-config 34 --wps-config 3
 
@@ -67,7 +70,7 @@ Sem nenhuma flag, o script instala o que estiver em `DEFAULT_LIBS` e `DEFAULT_MO
 | `-p, --prefix DIR` | Diretório base (padrão `$HOME/MODELS`) |
 | `-d, --downloads DIR` | Pasta dos tarballs (padrão `$HOME/Downloads`) |
 | `-j, --jobs N` / `--all-cores` | Núcleos para compilar (padrão: metade) |
-| `--mpas-version V` | `8.0.1` (padrão), outra tag, ou `latest` |
+| `--mpas-version V` | `8.0.1` (padrão), `X.Y.Z`, `latest` (última versão lançada) ou `master` (desenvolvimento). Aceita lista: `8.0.1,latest` instala as duas lado a lado (`MPAS-8.0.1/`, `MPAS-8.4.2/`...) |
 | `--wrf-version TAG` / `--wps-version TAG` | Fixa a versão (ex.: `v4.6.1`). Padrão: mais recente |
 | `--wrf-config N` / `--wrf-nest N` / `--wps-config N` | Respostas do `./configure` (sem menu) |
 | `-n, --dry-run` | Mostra o plano e não compila |

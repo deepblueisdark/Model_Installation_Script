@@ -2,17 +2,40 @@
 #-----------------------------------------------------------------------------------
 # MODEL: MPAS-A (GNU)
 #
-#   MPAS_VERSION / --mpas-version
+#   MPAS_VERSION / --mpas-version   (aceita lista: --mpas-version 8.0.1,latest)
 #       8.0.1   (padrão) -> clona a tag v8.0.1 em  $MODEL_DIR_INSTALL/MPAS-8.0.1
 #       X.Y.Z            -> clona a tag vX.Y.Z  em  $MODEL_DIR_INSTALL/MPAS-X.Y.Z
-#       latest           -> clona o branch padrão em $MODEL_DIR_INSTALL/MPAS-Model
+#       latest           -> última versão LANÇADA (tag mais recente), ex.: MPAS-8.4.2
+#       master           -> branch de desenvolvimento em $MODEL_DIR_INSTALL/MPAS-Model
 #                           (nem sempre funciona)
+#   Cada versão fica na sua pasta, então várias podem coexistir.
 #   MPAS_PRECISION (padrão single)
 #-----------------------------------------------------------------------------------
 
 # Diretório onde o MPAS fica (usado também pela verificação "já instalado")
 mpas_dir_name(){
-    if [ "${MPAS_VERSION:-8.0.1}" = latest ]; then echo "MPAS-Model"; else echo "MPAS-${MPAS_VERSION:-8.0.1}"; fi
+    local v="${1:-${MPAS_VERSION:-8.0.1}}"
+    case "$v" in
+        master) echo "MPAS-Model" ;;
+        *)      echo "MPAS-${v#v}" ;;
+    esac
+}
+
+# resolve_mpas_version <versão> -> imprime a versão real (latest -> X.Y.Z da tag mais nova)
+resolve_mpas_version(){
+    local v="${1#v}" newest
+    if [ "$v" = latest ]; then
+        newest=$(timeout 60 git ls-remote --tags --refs "$GIT_URL_MPAS" 'v*' 2>/dev/null \
+                 | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
+        if [ -n "$newest" ]; then
+            echo "${newest#v}"
+        else
+            echo "[AVISO] não consegui consultar as tags do MPAS; 'latest' não resolvido." >&2
+            echo "latest"
+        fi
+    else
+        echo "$v"
+    fi
 }
 
 #-----------------------------------------------------------------------------------
@@ -40,8 +63,12 @@ patch_mpas_c_ptr(){
 }
 
 install_MPAS(){
-    local mpas_version="${MPAS_VERSION:-8.0.1}"
-    local mpas_dir; mpas_dir="$(mpas_dir_name)"
+    local mpas_version; mpas_version="$(resolve_mpas_version "${MPAS_VERSION:-8.0.1}")"
+    if [ "$mpas_version" = latest ]; then
+        echo "ERRO: não foi possível descobrir a versão mais recente do MPAS (sem acesso ao GitHub?)."
+        exit 1
+    fi
+    local mpas_dir; mpas_dir="$(mpas_dir_name "$mpas_version")"
     local precision="${MPAS_PRECISION:-single}"
 
     define_compilers "$GNU_MPI"
@@ -63,7 +90,8 @@ install_MPAS(){
 
     cd "$MODEL_DIR_INSTALL"
     rm -rf "$mpas_dir"
-    if [ "$mpas_version" = latest ]; then
+    echo ">> MPAS versão: $mpas_version  ->  $MODEL_DIR_INSTALL/$mpas_dir"
+    if [ "$mpas_version" = master ]; then
         git clone "$GIT_URL_MPAS" "$mpas_dir"
         cd "$mpas_dir"
     else

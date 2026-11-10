@@ -211,9 +211,16 @@ check_downloads() {
         if [ "$any" -eq 1 ]; then ok=$((ok+1)); else fail=$((fail+1)); fi
     done
     echo
-    for entry in "AEC|$GIT_URL_AEC|" "WRF|$GIT_URL_WRF|${WRF_VERSION:-}" "WPS|$GIT_URL_WPS|${WPS_VERSION:-}" "MPAS|$GIT_URL_MPAS|v${MPAS_VERSION}"; do
+    local gits=( "AEC|$GIT_URL_AEC|" "WRF|$GIT_URL_WRF|${WRF_VERSION:-}" "WPS|$GIT_URL_WPS|${WPS_VERSION:-}" ) v
+    for v in ${MPAS_VERSION//,/ }; do
+        v="${v#v}"
+        case "$v" in
+            latest|master) gits+=( "MPAS($v)|$GIT_URL_MPAS|" ) ;;
+            *)             gits+=( "MPAS|$GIT_URL_MPAS|v$v" ) ;;
+        esac
+    done
+    for entry in "${gits[@]}"; do
         IFS='|' read -r name repo tag <<<"$entry"
-        [ "$tag" = "vlatest" ] && tag=""
         if [ -n "$tag" ]; then
             timeout 60 git ls-remote --tags --heads "$repo" "$tag" 2>/dev/null | grep -q . && st=OK || st=FALHA
         else

@@ -48,7 +48,8 @@ CONFIGURAÇÃO
   -p, --prefix DIR        Diretório base (INSTALLATION_PATH). Padrão: \$HOME/MODELS
   -d, --downloads DIR     Onde ficam os tarballs. Padrão: \$HOME/Downloads
   -j, --jobs N            Núcleos para compilar   (--all-cores usa todos)
-      --mpas-version V    Ex.: 8.0.1 (padrão) | 8.2.2 | latest
+      --mpas-version V    8.0.1 (padrão) | X.Y.Z | latest (última versão lançada) | master
+                          Aceita lista para instalar várias lado a lado: --mpas-version 8.0.1,latest
       --wrf-version TAG   Ex.: v4.6.1  (padrão: mais recente)
       --wps-version TAG   Ex.: v4.6.0  (padrão: mais recente)
       --wrf-config N      Opção do ./configure do WRF (ex.: 34 = GNU dmpar). Sem isso, abre o menu.
@@ -71,6 +72,7 @@ AÇÕES AVULSAS
 
 EXEMPLOS
   ./Models_installer_main.bash --libs mpas --models mpas --jobs 8
+  ./Models_installer_main.bash --models mpas --mpas-version 8.0.1,latest   # duas versões lado a lado
   ./Models_installer_main.bash --libs wrf --models wrf,wps --wrf-config 34 --wps-config 3
   ./Models_installer_main.bash --mode 2 --prefix /opt/MODELS --libs all --models none
   ./Models_installer_main.bash --libs hdf5 --force --verbose
@@ -215,6 +217,8 @@ step_marker(){
         wrf)            echo "$MODEL_DIR_INSTALL/WRF/main/wrf.exe" ;;
         wps)            echo "$MODEL_DIR_INSTALL/WPS/metgrid/src/metgrid.exe" ;;
         mpas)           echo "$MODEL_DIR_INSTALL/$(mpas_dir_name)/atmosphere_model" ;;
+        mpas@latest)    echo "" ;;    # versão não resolvida: sempre tenta instalar
+        mpas@*)         echo "$MODEL_DIR_INSTALL/$(mpas_dir_name "${1#mpas@}")/atmosphere_model" ;;
     esac
 }
 
@@ -223,7 +227,7 @@ step_func(){
         zstd) echo ensure_zstd_in_libs_dir ;;
         wrf)  echo install_wrf ;;
         wps)  echo install_wps ;;
-        mpas) echo install_MPAS ;;
+        mpas|mpas@*) echo install_MPAS ;;
         *)    echo "install_$1" ;;
     esac
 }
@@ -269,6 +273,24 @@ build_plan(){
     for x in "${LIB_ORDER[@]}";   do [ -n "${want[$x]:-}" ] && [ -z "${skip[$x]:-}" ] && PLAN_LIBS+=("$x"); done
     for x in "${MODEL_ORDER[@]}"; do [ -n "${want[$x]:-}" ] && [ -z "${skip[$x]:-}" ] && PLAN_MODELS+=("$x"); done
     for x in "${!added[@]}"; do PLAN_AUTO+=("$x"); done
+
+    # MPAS: uma etapa por versão pedida (--mpas-version 8.0.1,latest)
+    if _in_list mpas "${PLAN_MODELS[@]}"; then
+        local models=() v r seen=" "
+        for x in "${PLAN_MODELS[@]}"; do
+            if [ "$x" = mpas ]; then
+                for v in ${MPAS_VERSION//,/ }; do
+                    r="$(resolve_mpas_version "$v")"
+                    [[ "$seen" == *" $r "* ]] && continue      # evita duplicata (ex.: latest = 8.4.2)
+                    seen+="$r "
+                    models+=("mpas@$r")
+                done
+            else
+                models+=("$x")
+            fi
+        done
+        PLAN_MODELS=("${models[@]}")
+    fi
     return 0
 }
 
@@ -303,11 +325,20 @@ list_status(){
         printf "   %-15s %-10s deps: %s\n" "$x" "$st" "$(step_deps "$x" | tr '\n' ' ')"
     done
     echo "Modelos  —  em $MODEL_DIR_INSTALL"
-    for x in "${MODEL_ORDER[@]}"; do
+    for x in wrf wps; do
         m="$(step_marker "$x")"
         if [ -n "$m" ] && [ -e "$m" ]; then st="instalado"; else st="-"; fi
         printf "   %-15s %-10s deps: %s\n" "$x" "$st" "$(step_deps "$x" | tr '\n' ' ')"
     done
+    printf "   %-15s %-10s deps: %s\n" "mpas" "" "$(step_deps mpas | tr '\n' ' ')"
+    local d found=0
+    for d in "$MODEL_DIR_INSTALL"/MPAS-*/; do
+        [ -d "$d" ] || continue
+        found=1
+        if [ -x "$d/atmosphere_model" ]; then st="instalado"; else st="incompleto"; fi
+        printf "     └ %-11s %s\n" "$(basename "$d")" "$st"
+    done
+    [ "$found" -eq 0 ] && echo "     (nenhuma versão do MPAS instalada)"
     echo "Presets de --libs: wrf, mpas, icon, all, none"
 }
 
@@ -324,6 +355,12 @@ _step_shell(){
     set -eE -o pipefail
     trap 'echo "[ERRO] comando falhou (código $?) em ${FUNCNAME[0]:-main}, linha $LINENO: $BASH_COMMAND" >&2' ERR
     "$1"
+}
+
+# Aplica as variáveis da etapa (step_env, ex.: MPAS_VERSION=8.0.1) e roda
+_step_run(){
+    if [ "${#step_env[@]}" -gt 0 ]; then export "${step_env[@]}"; fi
+    _step_shell "$1"
 }
 
 run_step(){
@@ -353,15 +390,19 @@ run_step(){
     { [ "$name" = wrf ] && [ -z "${WRF_CONFIG_OPT:-}" ]; } && mode="direct"
     { [ "$name" = wps ] && [ -z "${WPS_CONFIG_OPT:-}" ]; } && mode="direct"
 
+    # Etapas mpas@X: fixa a versão só para esta etapa
+    local step_env=()
+    [[ "$name" == mpas@* ]] && step_env=( "MPAS_VERSION=${name#mpas@}" )
+
     t0=$SECONDS
     echo -n ">>> [$name] instalando... "
     case "$mode" in
         quiet)  echo "(log: $log)"
-                ( _step_shell "$func" ) >"$log" 2>&1 </dev/null; rc=$? ;;
+                ( _step_run "$func" ) >"$log" 2>&1 </dev/null; rc=$? ;;
         tee)    echo "(log: $log)"
-                ( _step_shell "$func" ) 2>&1 | tee "$log"; rc=${PIPESTATUS[0]} ;;
+                ( _step_run "$func" ) 2>&1 | tee "$log"; rc=${PIPESTATUS[0]} ;;
         direct) echo "(configure interativo; use --${name}-config N para automatizar)"
-                ( _step_shell "$func" ); rc=$?
+                ( _step_run "$func" ); rc=$?
                 echo "(saída exibida no terminal; log de compilação dentro da pasta do modelo)" > "$log" ;;
     esac
     dt=$((SECONDS - t0))
